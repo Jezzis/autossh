@@ -1,0 +1,168 @@
+#!/bin/bash
+
+# server config path
+CONFIG_PATH=~/workspace/shell/servers
+CONFIG_MENU=()
+
+cd $CONFIG_PATH
+
+function check_server_config_dir()
+{
+	if [ ! -e $1 ]; then
+		echo "path[$1] do not exists!"
+		exit ;
+	fi
+
+	if [ $2 = "file" ] && [ ! -f $1 ]; then
+		echo "file path[$1] do not exists!"
+		exit ;	
+	fi
+}
+
+function list_servers(){
+
+	target="${CONFIG_PATH}/${1}";
+	target=`echo $target|sed "s/[ \/]\{1,\}$//g"`
+	check_server_config_dir $target;
+
+	i=0;
+	CONFIG_MENU=()
+	for file in `ls $target`
+	do
+		if [ -z "${file}" ];then
+			continue;
+		fi
+
+		if [ -d "${target}/${file}" ]; then
+			echo "[dir] ${file}";
+		else
+			id=$(($i+1));
+			echo "${id}). ${file}";
+			CONFIG_MENU[$i]="${target}/$file";
+			i=$(($i+1));
+		fi
+	done
+}
+
+function login_server(){
+	if [ "$1" -gt 0 ] 2>/dev/null; then
+		idx=$(($1-1));
+		target=${CONFIG_MENU[$idx]};
+	else
+		target="${CONFIG_PATH}/${1}";
+	fi
+	check_server_config_dir $target "file";
+	echo "log in server [${target}]...";
+
+	# read config
+	while read line; do  
+		eval "$line"; 
+	done < $target  
+
+	ssh_cmd="ssh ";
+	if [ -n "${PORT}" ]; then
+		ssh_cmd="${ssh_cmd} -p ${PORT}";
+	fi
+
+	if [ -n "${IDENTITY_FILE}" ]; then
+		ssh_cmd="${ssh_cmd} -i ${IDENTITY_FILE}";
+		ssh_cmd="${ssh_cmd} ${USER}@${HOST}";
+		$ssh_cmd;
+	else
+		ssh_cmd="${ssh_cmd} ${USER}@${HOST}";
+		expect_cmd="
+			expect {
+					\"*assword\" {set timeout 6000; send \"${PASSWORD}\n\"; exp_continue ; sleep 3; }
+					\"yes/no\" {send \"yes\n\"; exp_continue;}
+			}
+			interact
+		";
+		expect -c "
+			spawn ${ssh_cmd}
+			${expect_cmd}
+		";
+		echo "logoff done.\n"
+	fi
+}
+
+function choose_server(){
+    read serverNum
+    if [[ $serverNum -gt $CONFIG_LENGTH ]] ;
+    then
+        echo "输入的序号不正确，请重新输入:"
+        choose_server ;
+        return ;
+    fi
+    if [[ $serverNum -lt 1 ]] ;
+    then
+        echo "输入的序号不正确，请重新输入:"
+        choose_server ;
+        return ;
+    fi
+
+    auto_login $serverNum;
+}
+
+function auto_login(){
+
+    num=$(($1-1))
+    CONFIG=(${CONFIGS[$num]})
+    echo "正在登录【${CONFIG[0]}】"
+
+	command="
+        expect {
+                \"*assword\" {set timeout 6000; send \"${CONFIG[4]}\n\"; exp_continue ; sleep 3; }
+                \"*passphrase\" {set timeout 6000; send \"${CONFIG[4]}\r\n\"; exp_continue ; sleep 3; }
+                \"yes/no\" {send \"yes\n\"; exp_continue;}
+                \"Last*\" {  send_user \"\n成功登录【${CONFIG[0]}】\n\";}
+        }
+       interact
+    ";
+   pem=${CONFIG[5]}
+   if [ -n "$pem" ]
+   then
+	expect -c "
+		spawn ssh -p ${CONFIG[1]} -i ${CONFIG[5]} ${CONFIG[3]}@${CONFIG[2]}
+		${command}
+	"
+   else
+	expect -c "
+		spawn ssh -p ${CONFIG[1]} ${CONFIG[3]}@${CONFIG[2]}
+		${command}
+	"
+   fi
+    echo "您已退出【${CONFIG[0]}】"
+
+}
+
+function get_command()
+{
+	command=$1
+	while [ -z "${command}" ]
+	do
+		read -p "> please input command {list|login|quit}: " -e command;
+	done
+	echo $command;
+}
+
+command=`get_command "${*}"`
+while [ -n "${command}" ]
+do 
+	args=($command)
+	command=${args[0]}
+	unset args[0]
+	case "$command" in
+	  list|ls)
+		list_servers ${args[*]}
+		;;
+	  login)
+		login_server ${args[*]}
+		;;
+	  quit|q)
+		exit;
+		;;
+	  *)
+	    login_server $command;
+	esac
+	command=`get_command`
+done
