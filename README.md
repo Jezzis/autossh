@@ -72,8 +72,8 @@ COMMON_CONFIG_FILE=common_file_name # 公共配置文件名
 
 ## 5.2 使用Tab键补全
 
-![Tab补全操作](./resources/ls_support.gif)
+![Tab补全操作](./resources/tab_support.gif)
 
 ## 5.3 结合ls(list)命令,使用序号登录
 
-![list & 序号操作](./resources/tab_support.gif)
+![list & 序号操作](./resources/ls_support.gif)
