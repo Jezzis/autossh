@@ -2,6 +2,9 @@
 
 # server config path
 CONFIG_PATH=~/workspace/shell/servers
+
+# common server config file
+COMMON_CONFIG_FILE="common"
 CONFIG_MENU=()
 
 cd $CONFIG_PATH
@@ -10,54 +13,76 @@ function check_server_config_dir()
 {
 	if [ ! -e $1 ]; then
 		echo "path[$1] do not exists!"
-		exit ;
+		return 1
 	fi
 
-	if [ $2 = "file" ] && [ ! -f $1 ]; then
+	if [ -n "$2" ] && [ $2 = "file" ] && [ ! -f $1 ]; then
 		echo "file path[$1] do not exists!"
-		exit ;	
+		return 1
 	fi
+	return 0
 }
 
-function list_servers(){
-
+function list_servers()
+{
 	target="${CONFIG_PATH}/${1}";
 	target=`echo $target|sed "s/[ \/]\{1,\}$//g"`
-	check_server_config_dir $target;
+	check_server_config_dir $target
+	if [ 1 -eq $? ]; then
+		return;
+	fi
 
 	i=0;
+	CONFIG_DIR=()
+	CONFIG_FILE=()
 	CONFIG_MENU=()
-	for file in `ls $target`
+	for file in `ls $target |grep -v ${COMMON_CONFIG_FILE}`
 	do
-		if [ -z "${file}" ];then
+		file=`echo ${file} |sed "s/\@//g"`
+		if [ -z "${file}" ]; then
 			continue;
 		fi
-
-		if [ -d "${target}/${file}" ]; then
-			echo "[dir] ${file}";
+		
+		if [ -d "${file}" ]; then
+			CONFIG_DIR[$i]=$file;
 		else
-			id=$(($i+1));
-			echo "${id}). ${file}";
-			CONFIG_MENU[$i]="${target}/$file";
-			i=$(($i+1));
+			CONFIG_FILE[$i]="$(($i+1))). $file\n";
+			CONFIG_MENU[$i]="${target}/$file"
 		fi
+		i=$(($i+1));
 	done
+
+	if [ $i -gt 0 ]; then
+		if [ ${#CONFIG_DIR[@]} -gt 0 ]; then
+			echo -e "dirs:\n ${CONFIG_DIR[@]}"
+		fi
+
+		if [ ${#CONFIG_FILE[@]} -gt 0 ]; then
+			echo -e "svrs:\n ${CONFIG_FILE[@]}"
+			echo "-----------------------------"
+			echo "tips: choose index to log in";
+		fi
+	else
+		echo "nothing...";
+	fi
 }
 
-function login_server(){
+function login_server()
+{
 	if [ "$1" -gt 0 ] 2>/dev/null; then
 		idx=$(($1-1));
 		target=${CONFIG_MENU[$idx]};
 	else
 		target="${CONFIG_PATH}/${1}";
 	fi
-	check_server_config_dir $target "file";
-	echo "log in server [${target}]...";
+	check_server_config_dir $target "file"
+	if [ 1 -eq $? ]; then
+		return;
+	fi
 
-	# read config
-	while read line; do  
-		eval "$line"; 
-	done < $target  
+	parse_config $target
+
+	echo "log in server [${HOST}]...";
 
 	ssh_cmd="ssh ";
 	if [ -n "${PORT}" ]; then
@@ -81,58 +106,8 @@ function login_server(){
 			spawn ${ssh_cmd}
 			${expect_cmd}
 		";
-		echo "logoff done.\n"
+		echo -e " logout.\n"
 	fi
-}
-
-function choose_server(){
-    read serverNum
-    if [[ $serverNum -gt $CONFIG_LENGTH ]] ;
-    then
-        echo "输入的序号不正确，请重新输入:"
-        choose_server ;
-        return ;
-    fi
-    if [[ $serverNum -lt 1 ]] ;
-    then
-        echo "输入的序号不正确，请重新输入:"
-        choose_server ;
-        return ;
-    fi
-
-    auto_login $serverNum;
-}
-
-function auto_login(){
-
-    num=$(($1-1))
-    CONFIG=(${CONFIGS[$num]})
-    echo "正在登录【${CONFIG[0]}】"
-
-	command="
-        expect {
-                \"*assword\" {set timeout 6000; send \"${CONFIG[4]}\n\"; exp_continue ; sleep 3; }
-                \"*passphrase\" {set timeout 6000; send \"${CONFIG[4]}\r\n\"; exp_continue ; sleep 3; }
-                \"yes/no\" {send \"yes\n\"; exp_continue;}
-                \"Last*\" {  send_user \"\n成功登录【${CONFIG[0]}】\n\";}
-        }
-       interact
-    ";
-   pem=${CONFIG[5]}
-   if [ -n "$pem" ]
-   then
-	expect -c "
-		spawn ssh -p ${CONFIG[1]} -i ${CONFIG[5]} ${CONFIG[3]}@${CONFIG[2]}
-		${command}
-	"
-   else
-	expect -c "
-		spawn ssh -p ${CONFIG[1]} ${CONFIG[3]}@${CONFIG[2]}
-		${command}
-	"
-   fi
-    echo "您已退出【${CONFIG[0]}】"
-
 }
 
 function get_command()
@@ -140,11 +115,56 @@ function get_command()
 	command=$1
 	while [ -z "${command}" ]
 	do
-		read -p "> please input command {list|login|quit}: " -e command;
+		read -p "> " -e command;
 	done
 	echo $command;
 }
 
+function parse_config()
+{
+	i=1
+	configs=($1)
+	cur_dir=`dirname "$1"`
+	while [ "$cur_dir" != "$CONFIG_PATH" ]; do
+		target="$cur_dir/$COMMON_CONFIG_FILE"
+		if [ -f $target ]; then
+			configs[$i]=$target
+			i=$(($i+1));
+		fi
+		cur_dir=`dirname "$cur_dir"`
+	done
+
+	i=$(($i-1))
+	while [ $i -ge 0 ]; do
+		read_server_config ${configs[$i]}
+		i=$(($i-1))
+	done
+}
+
+function read_server_config()
+{
+	# read config
+	file=$1
+	while read line; do  
+		eval "$line"; 
+	done < $file
+}
+
+function usage()
+{
+	echo "Usage: {list|login|quit}";
+	if [ -n "$1" ]; then
+		echo -e "help:\tDisplay help.";
+
+		echo -e "list:\tList servers.";
+		echo -e "\tlist [PATH]";
+
+		echo -e "login:\tLogin server.";
+		echo -e "\tlogin [PATH|ID]";
+	fi
+}
+
+usage
 command=`get_command "${*}"`
 while [ -n "${command}" ]
 do 
@@ -157,6 +177,9 @@ do
 		;;
 	  login)
 		login_server ${args[*]}
+		;;
+	  help|h|"?")
+		usage "detail"
 		;;
 	  quit|q)
 		exit;
