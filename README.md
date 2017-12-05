@@ -64,7 +64,6 @@ CONFIG_PATH=path_to_server_config # 服务器配置目录
 COMMON_CONFIG_FILE=common_file_name # 公共配置文件名
 ```
 
-
 # 五、使用
 
 ## 5.1 帮助命令
