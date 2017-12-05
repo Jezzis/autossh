@@ -82,7 +82,7 @@ function login_server()
 
 	parse_config $target
 
-	echo "log in server [${HOST}]...";
+	echo "logging in to [${HOST}], waiting..."
 
 	ssh_cmd="ssh ";
 	if [ -n "${PORT}" ]; then
@@ -97,12 +97,14 @@ function login_server()
 		ssh_cmd="${ssh_cmd} ${USER}@${HOST}";
 		expect_cmd="
 			expect {
-					\"*assword\" {set timeout 6000; send \"${PASSWORD}\n\"; exp_continue ; sleep 3; }
-					\"yes/no\" {send \"yes\n\"; exp_continue;}
-			}
+				\"*assword\" {send \"${PASSWORD}\n\"}
+				\"*yes/no*\" {send \"yes\n\"; exp_continue;}
+				\"Last login\" {send_user \"log into \[${HOST}\] successfully...\n\"}
+			} 
 			interact
-		";
+		"
 		expect -c "
+			set timeout 10
 			spawn ${ssh_cmd}
 			${expect_cmd}
 		";
