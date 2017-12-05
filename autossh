@@ -4,7 +4,7 @@
 CONFIG_PATH=~/workspace/shell/servers
 
 # common server config file
-COMMON_CONFIG_FILE="common"
+COMMON_CONFIG_FILE=".autossh_common"
 CONFIG_MENU=()
 
 cd $CONFIG_PATH
