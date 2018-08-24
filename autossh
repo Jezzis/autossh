@@ -84,16 +84,12 @@ function login_server()
 
 	echo "logging in to [${HOST}], waiting..."
 
-	ssh_cmd="ssh ";
+	ssh_cmd="ssh -o ServerAliveInterval=60";
 	if [ -n "${PORT}" ]; then
 		ssh_cmd="${ssh_cmd} -p ${PORT}";
 	fi
 
-	if [ -n "${IDENTITY_FILE}" ]; then
-		ssh_cmd="${ssh_cmd} -i ${IDENTITY_FILE}";
-		ssh_cmd="${ssh_cmd} ${USER}@${HOST}";
-		$ssh_cmd;
-	else
+	if [ -n "${PASSWORD}" ]; then
 		ssh_cmd="${ssh_cmd} ${USER}@${HOST}";
 		expect_cmd="
 			expect {
@@ -109,6 +105,10 @@ function login_server()
 			${expect_cmd}
 		";
 		echo -e " logout.\n"
+	else 
+		ssh_cmd="${ssh_cmd} -i ${IDENTITY_FILE}";
+		ssh_cmd="${ssh_cmd} ${USER}@${HOST}";
+		$ssh_cmd;
 	fi
 }
 
